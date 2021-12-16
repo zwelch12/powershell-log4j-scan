@@ -8,11 +8,6 @@
 
 #Non-domain joined computers PS Remote
 
-#$SERVER = "SECOPS-01"
-#$USER = "User001"
-#Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\PowerShell\1\ShellIds' ConsolePrompting $true
-#ping SECOPS-01
-
 $path = Get-Location
 Write-Host "Current location: $path`n"
 
@@ -57,7 +52,7 @@ if ($prompt1 -eq ""){
 
 # Find any log4j vulnerable files
 Write-Host "Checking file system. Please wait..."
-$recurse = Get-Childitem –Path 'C:\Program Files', 'C:\Program Files (x86)', 'C:\Users' -Include *log4j-core-* -Exclude *log4j-core-2.16* -File -Recurse -ErrorAction SilentlyContinue
+$recurse = Get-Childitem –Path 'C:\' -Include *log4j-core-* -Exclude *log4j-core-2.16* -File -Recurse -ErrorAction SilentlyContinue
 
 # Create object for later excel file export.
 $computers_obj = $null
