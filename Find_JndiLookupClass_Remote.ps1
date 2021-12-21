@@ -1,173 +1,130 @@
-﻿# https://logging.apache.org/log4j/2.x/security.html
+<#
+.SYNOPSIS
+Query remote computer for vulnerable log4j files and output results to CSV
 
-# Check for CVE-2021-45046 (2.0-beta9 through 2.12.1 and 2.13.0 through 2.15.0)
-# Mitigation - remove the JndiLookup class from the classpath or upgrade to 2.16.0 (Java 8) or 2.12.2 (Java 7)
+.DESCRIPTION
+This script recurses through a list of computers / servers to find any files containing log4j
 
-# Check for CVE-2021-44228 (all versions from 2.0-beta9 through 2.12.1 and 2.13.0 through 2.14.1)
-# Mitigation - remove the JndiLookup class from the classpath or upgrade to 2.16.0 (Java 8) or 2.12.2 (Java 7)
+.LINK
+https://logging.apache.org/log4j/2.x/security.html
+https://github.com/zwelch12/powershell-log4j-scan
 
-#Non-domain joined computers PS Remote
 
-$path = Get-Location
-Write-Host "Current location: $path`n"
+Check for CVE-2021-45046 (2.0-beta9 through 2.12.1 and 2.13.0 through 2.15.0)
+    Mitigation - remove the JndiLookup class from the classpath or upgrade to 2.16.0 (Java 8) or 2.12.2 (Java 7)
 
-$computerlist_path = Read-Host "Please enter path or name of file" 
+Check for CVE-2021-44228 (all versions from 2.0-beta9 through 2.12.1 and 2.13.0 through 2.14.1)
+    Mitigation - remove the JndiLookup class from the classpath or upgrade to 2.16.0 (Java 8) or 2.12.2 (Java 7)
 
-$computerlist = Get-Content $computerlist_path
+Check for CVE-2021-4104 (untrusted deserialization flaw affecting Log4j version 1.2 - Fix is to upgrade to 2.17.0)
 
-Write-Host "`nPopulated list of server names below.`n"
-$computerlist
-pause
+Check for CVE-2021-45105 (DoS vulnerability affecting versions 2.0-beta9 to 2.16.0)
 
-# load in export function
-function export(){
-$prompt3 = Read-Host "Do you wish to export script findings? (Results exported to desktop) ENTER to EXPORT."
-if($prompt3 -eq ""){
+.NOTES
 
-$invokeresults | Select-Object ComputerName,Vulnerable,RunspaceId,Path | Export-Csv "$env:USERPROFILE\Desktop\log4j-local-scanresults.csv" -NoTypeInformation
-        }
-}
+#>
 
-$creds = Get-Credential
 
+Write-Host -ForegroundColor DarkYellow "`nThis script will check the file system for any vulnerable log4j files."
+
+# Display the current location
+Write-Host "Current location: "(Get-Location)"`n"
+
+# Get the path of the server list
+$computerlist = Get-Content (Read-Host "Please enter path or name of file" )
+
+# Write the server list to stout
+Write-Host "`nPopulated list of server names below.`n`n"$computerlist
+
+# Get the administrator credentials
+$credential = Get-Credential -Message "Please enter administrator credentials for PSRemoting to work."
+
+# The results of foreach is stored in invoke results for later output to CSV
 $invokeresults = foreach ($computer in $computerlist){
 
-
-Invoke-Command -Computer $computer -Credential $creds -ScriptBlock { 
-
-#load in the .NET assemblies
-Add-Type -AssemblyName System.IO.Compression
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-
-# Just in case the zip file is not cleaned from previous runtime.
-#$zip.Dispose()
-#$stream.Close()
-#$stream.Dispose()
-
-Write-Host -ForegroundColor DarkYellow "`nThis script will check the file system for any vulnerable log4j files.`nOPTIONALLY, this script can delete JndiLookup.Class"
-$prompt1 = Read-Host "Press ENTER to run this script on $($env:COMPUTERNAME)"
-
-
-if ($prompt1 -eq ""){
-
-# Find any log4j vulnerable files
-Write-Host "Checking file system. Please wait..."
-$recurse = Get-Childitem –Path 'C:\' -Include *log4j-core-* -Exclude *log4j-core-2.16* -File -Recurse -ErrorAction SilentlyContinue
-
-# Create object for later excel file export.
-$computers_obj = $null
-$computers_obj = @()
-
-# If recurse does not find any log4j files, it is not vulnerable
-if ($recurse -eq $null){
-
-    Write-Host -ForegroundColor Green "`n$Computername This computer does not have any log4j vulnerabilities."
-    $details = @{                     
-    ComputerName = $env:COMPUTERNAME
-    Vulnerable = "NO"
-    }
-    $computers_obj += New-Object PSObject -Property $details
-    return $computers_obj
-    
-}
-
-# If recurse DOES return log4j files, run through .ZIP routine to check for JndiLookup.Class
-elseif($recurse -ne $null){
-
-
-    Write-Host -ForegroundColor Green "`n$Computername This computer is potientially vulnerable to log4j. Checking for JndiLookup.Class"
-    sleep 5
-
-
-ForEach ($log4j_file in $recurse){
-
-$stream = New-Object IO.FileStream($log4j_file, [IO.FileMode]::Open)
-$mode   = [System.IO.Compression.ZipArchiveMode]::Update
-$zip    = New-Object IO.Compression.ZipArchive($stream, $mode)
-
-
-$jndilookup_bool = ($zip.Entries | Where-Object {$_.Name -contains "JndiLookup.class"}) 
-
-        if ($jndilookup_bool) {
-
-        ForEach-Object { 
-
-                Write-Host -ForegroundColor Red "Found JndiLookup.class in $($log4j_file.FullName)"
-                
-               
-                Write-Host "Do you wish to delete the JndiLookup.class file?"
-                $prompt2 = Read-Host "NOTE: PLEASE STOP ASSOCIATED PROGRAM, THEN START AFTER DELETION. `n Enter Y/N to delete"
-                
-                if ($prompt2 -eq "Y" -or $prompt2 -eq "y"){
-
-                #$jndilookup_bool.Delete(); Write-Host "Deleted JndiLookup.Class file!"
-
-                $details = @{                     
-                ComputerName = $env:COMPUTERNAME
-                Path = "$($log4j_file.FullName)"
-                Vulnerable = "NO (mitigated)"
-                }
-                $computers_obj += New-Object PSObject -Property $details
-                return $computers_obj
-
-                }
-                else{
-
-                $details = @{                     
-                ComputerName = $env:COMPUTERNAME
-                Path = "$($log4j_file.FullName)"
-                Vulnerable = "YES"
-                }
-                $computers_obj += New-Object PSObject -Property $details
-                return $computers_obj
-
-
-                }
-                
-             }
-
-        }
-         else{
-
-          $details = @{                     
-          ComputerName = $env:COMPUTERNAME
-          Path = $($log4j_file.FullName)
-          Vulnerable = "NO"
-          }
-          $computers_obj += New-Object PSObject -Property $details
-
-          Write-Host -ForegroundColor Green "NO JndiLookup.class located in $($log4j_file.FullName)"
-
+        # Invokes command on remote computer.  Script block below searches through file system for log4j files.
+        Invoke-Command -Computer $computer -Credential $credential -ScriptBlock { 
+     
+        # Create object for later excel file export.
+        $computers_obj = $null
+        $computers_obj = @()
+        
+        # Find any log4j vulnerable files
+        Write-Host "Checking file system. Please wait..."
+        
+        # no native command to exclude a C:\Windows in Get-ChildItem but we'll get er done
+        $root = (Get-ChildItem -Directory -Path "$env:SystemDrive\" | Where-Object {$_.Name -ne "Windows"})
+        $recurse = Get-ChildItem -Path $root.'FullName' -Recurse -Include "log4j-core*","log4j-1*" -Exclude "log4j-core-2.17.0"  -File -ErrorAction SilentlyContinue
+        
+        # If recurse does not find any log4j files, it is not vulnerable
+            if ($recurse -eq $null)
             
+            {
+            
+                Write-Host -ForegroundColor Green "`n$env:COMPUTERNAME This computer does not have any log4j vulnerabilities."
+                $details = 
+                @{                     
+                ComputerName = $env:COMPUTERNAME
+                Vulnerable = "NO"
+                }
+            
+                $computers_obj += New-Object PSObject -Property $details
+                return $computers_obj
+            
+                
+            }
+            
+            else
+            
+            {
+            
+                 Write-Host -ForegroundColor Red "`n$env:COMPUTERNAME Has vulnerable versions of log4j found.`n"
+            
+                 # we already filter out 2.17 in gci but we will make sure it's filtered out again anyway
+                 $log4j_file = $recurse | Where-Object {$_.'Name' -notlike 'log4j-core-2.17*'}
+                 $log4j_file.'Name'
+            
+                 # just in case there is more than one log4j file, write the results.
+                 foreach ($item in $log4j_file)
+                 {
+            
+            
+                    $details = 
+                    @{                     
+                    ComputerName = $env:COMPUTERNAME
+                    Path = "$($item.FullName)"
+                    Vulnerable = "YES"
+                    }
+            
+                    $computers_obj += New-Object PSObject -Property $details
+                    return $computers_obj
+            
+                 }
+            
+                                
+            
+            # end else
+            }
+        
+        # end invoke command
+        }
 
+
+
+
+    # end for loop
     }
 
-    
 
-# Clean up opened .JAR files
-$zip.Dispose()
-$stream.Close()
-$stream.Dispose()
+    # Check to see if we want to export results to CSV.
+    $prompt2 = Read-Host "Do you wish to export script findings to DESKTOP?  ENTER to EXPORT."
 
-}
+    if($prompt2 -eq "")
 
-#export
+        {
+            
+            # We use select object here to ensure columes in CSV are in correct order
+            $invokeresults | Select-Object ComputerName,Vulnerable,RunspaceId,Path | Export-Csv "$env:USERPROFILE\Desktop\log4j-local-scanresults.csv" -NoTypeInformation
+        
+        }
 
-
-}
-
-}
-
-# end script block
-}
-
-
-}
-
-
-export
-Write-Host -ForegroundColor Red "`n`tExported results to $($env:USERPROFILE)\Desktop`n`n"
-
-
-
-pause
