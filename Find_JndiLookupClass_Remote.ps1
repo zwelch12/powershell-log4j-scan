@@ -3,7 +3,8 @@
 Query remote computer for vulnerable log4j files and output results to CSV
 
 .DESCRIPTION
-This script recurses through a list of computers / servers to find any files containing log4j
+This script recurses through a list of computers / servers to find any files containing log4j.
+It is recommended to test a small batch of computers before using a full server list.
 
 .LINK
 https://logging.apache.org/log4j/2.x/security.html
@@ -21,6 +22,30 @@ Check for CVE-2021-4104 (untrusted deserialization flaw affecting Log4j version 
 Check for CVE-2021-45105 (DoS vulnerability affecting versions 2.0-beta9 to 2.16.0)
 
 .NOTES
+
+If PSRemoting does not work, check the following:
+(http://woshub.com/invoke-command-run-powershell-scripts-remotely/)
+
+1.  PSRemoting must be enabled on the remote computer:
+    Get-Service -Name "*WinRM*" | fl
+
+2.  Enable PSRemoting if it is off:
+    Enable-PSRemoting  (This command will add exceptions to the local win32 firewall).
+
+3.  Test PSRemoting with below command:
+    Test-WsMan <computer-name>
+
+4.  Computers that are off the domain and not in AD will need the below configured.
+    Set-Item wsman:\localhost\Client\TrustedHosts -value <your-ip-address>
+    Get-Item WSMan:\localhost\Client\TrustedHosts
+
+5.  Apply the changes with the below command:
+    Restart-Service WinRM
+
+6.  You must be a part of the "Administrators" group on the computer you are trying to remote into.
+
+
+7.  The computer must be in AD or step number for will be required.
 
 #>
 
